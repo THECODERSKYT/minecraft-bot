@@ -1,9 +1,9 @@
 const mineflayer = require('mineflayer');
 
 const bot = mineflayer.createBot({
-  host: 'SKYT1100.aternos.me', // Replace with your server IP
-  port: 25565, // Default Minecraft port
-  username: 'yahoo', // Replace with your bot's username
+  host: 'BlazeSMP01.aternos.me', // Replace with your server IP
+  port: 37053, // Default Minecraft port
+  username: 'BLAZY', // Replace with your bot's username
 });
 
 bot.on('chat', (username, message) => {
