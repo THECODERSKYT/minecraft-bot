@@ -1,11 +1,16 @@
 {
-  "name": "minecraft-bot",
+  "name": "minecraft-chatgpt-bot",
   "version": "1.0.0",
-  "main": "bot.js",
+  "description": "AI Minecraft bot named ChatGPT for offline servers",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "mineflayer": "^4.8.0"
+    "@google/genai": "^1.16.0",
+    "dotenv": "^16.4.5",
+    "mineflayer": "^4.15.1",
+    "mineflayer-pathfinder": "^2.4.3",
+    "openai": "^4.28.0"
   }
 }
