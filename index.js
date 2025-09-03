@@ -581,4 +581,214 @@ function executeAction(action) {
                 bot.placeBlock(wood, blockPos).then(() => {
                   console.log(`Placed block at ${blockPos.x}, ${blockPos.y}, ${blockPos.z}`);
                 }).catch(err => {
-                  console.log(`Could not p
+                  console.log(`Could not place block: ${err.message}`);
+                });
+              }, blocksPlaced * 500);
+              blocksPlaced++;
+            }
+          }
+          console.log(`Building shelter with ${blocksPlaced} blocks`);
+        } else {
+          console.log('Not enough wood to build shelter (need at least 8 wood blocks)');
+        }
+      }
+      break;
+
+    case 'equip':
+      const item = bot.inventory.items().find(i => i.name.includes(parameter.toLowerCase()));
+      if (item) {
+        bot.equip(item, 'hand', () => {
+          console.log(`Equipped ${parameter}`);
+        });
+      }
+      break;
+
+    default:
+      console.log(`Unknown action: ${action}`);
+      bot.setControlState('forward', true);
+      setTimeout(() => {
+        bot.setControlState('forward', false);
+      }, 2000);
+  }
+}
+
+// getWorldState function (unchanged)
+function getWorldState() {
+  const { position, health, food } = bot.entity;
+  const inventory = bot.inventory.items().map(item => `${item.count} ${item.name}`).join(', ') || 'Empty';
+  const nearbyEntities = Object.values(bot.entities)
+    .filter(e => e.position && e.position.distanceTo(bot.entity.position) < 10)
+    .map(e => e.name || e.type)
+    .filter((name, i, arr) => arr.indexOf(name) === i);
+
+  const nearbyPlayers = Object.keys(bot.players)
+    .filter(name => name !== bot.username)
+    .filter(name => {
+      const player = bot.players[name];
+      return player && player.entity && player.entity.position.distanceTo(bot.entity.position) < 20;
+    });
+
+  return `
+Position: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}
+Health: ${health}/20
+Food: ${food}/20
+Inventory: ${inventory}
+Nearby entities: ${nearbyEntities.join(', ') || 'None'}
+Nearby players: ${nearbyPlayers.join(', ') || 'None'}
+Current goal: ${botState.goals[botState.currentGoalIndex]}
+Time: ${bot.time.timeOfDay}
+Biome: ${bot.blockAt(bot.entity.position)?.biome?.name || 'Unknown'}
+  `.trim();
+}
+
+// startAIThinking function (unchanged)
+// Auto collect dropped items more aggressively
+function collectNearbyItems() {
+  const droppedItems = Object.values(bot.entities).filter(entity => 
+    entity.kind === 'Drops' && 
+    entity.position &&
+    entity.position.distanceTo(bot.entity.position) < 12
+  );
+  
+  if (droppedItems.length > 0) {
+    console.log(`Found ${droppedItems.length} dropped items nearby, collecting...`);
+    // Find closest item
+    const closestItem = droppedItems.reduce((closest, item) => {
+      const dist = item.position.distanceTo(bot.entity.position);
+      return (!closest || dist < closest.distance) ? {item, distance: dist} : closest;
+    }, null);
+    
+    if (closestItem && closestItem.distance < 8) {
+      console.log(`Moving to collect item at distance ${closestItem.distance.toFixed(1)}`);
+      bot.lookAt(closestItem.item.position);
+      
+      // Move directly towards the item
+      if (closestItem.distance > 1.5) {
+        bot.setControlState('forward', true);
+        setTimeout(() => {
+          bot.setControlState('forward', false);
+        }, Math.min(1000, closestItem.distance * 200));
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// Auto eat food when hungry
+function manageHunger() {
+  const food = bot.inventory.items().find(item => 
+    ['bread', 'apple', 'carrot', 'potato', 'cooked_beef', 'cooked_porkchop', 
+     'cooked_chicken', 'cooked_mutton', 'cooked_fish', 'cooked_salmon',
+     'cookie', 'cake', 'pumpkin_pie'].includes(item.name)
+  );
+  
+  if (bot.food <= 15 && food) {
+    console.log(`Hungry (${bot.food}/20), eating ${food.name}`);
+    bot.equip(food, 'hand').then(() => {
+      bot.consume();
+    }).catch(err => console.log('Failed to eat:', err.message));
+    return true;
+  }
+  return false;
+}
+
+// Simple autonomous decision making without API calls
+function makeAutonomousDecision() {
+  const inventory = bot.inventory.items();
+  // Better wood counting - include all wood types
+  const woodCount = inventory.filter(item => 
+    item.name.includes('log') || 
+    item.name.includes('wood') || 
+    item.name.includes('plank')
+  ).reduce((a, b) => a + b.count, 0);
+  
+  const stoneCount = inventory.filter(item => 
+    item.name.includes('stone') || 
+    item.name.includes('cobblestone')
+  ).reduce((a, b) => a + b.count, 0);
+  
+  console.log(`Current inventory - Wood: ${woodCount}, Stone: ${stoneCount}, Health: ${bot.health}, Food: ${bot.food}`);
+  
+  // Priority 0: Auto equip armor if available
+  equipBestArmor();
+  
+  // Priority 1: Collect items if any nearby
+  if (collectNearbyItems()) {
+    return { action: "collect items", reason: "Collecting nearby dropped items" };
+  }
+  
+  // Priority 2: Eat if hungry
+  if (manageHunger()) {
+    return { action: "eating", reason: "Eating food to restore hunger" };
+  }
+  
+  // Priority 3: Simple goal-based logic
+  if (woodCount < 5) {
+    // Need more wood
+    const woodBlock = bot.findBlock({
+      matching: block => block.name.includes('_log') || block.name.includes('wood'),
+      maxDistance: 32
+    });
+    
+    if (woodBlock) {
+      return { action: "mine wood", reason: "Need wood for crafting" };
+    } else {
+      return { action: "explore north", reason: "Looking for trees" };
+    }
+  } else if (stoneCount < 10) {
+    // Have wood, need stone
+    const stoneBlock = bot.findBlock({
+      matching: block => block.name === 'stone' || block.name === 'cobblestone',
+      maxDistance: 32
+    });
+    
+    if (stoneBlock) {
+      return { action: "mine stone", reason: "Need stone for tools" };
+    } else {
+      return { action: "explore east", reason: "Looking for stone" };
+    }
+  } else if (woodCount >= 8) {
+    // Have enough materials, build shelter
+    return { action: "build shelter", reason: "Have enough materials for shelter" };
+  } else {
+    // Default exploration
+    const directions = ['north', 'south', 'east', 'west'];
+    const randomDir = directions[Math.floor(Math.random() * directions.length)];
+    return { action: `explore ${randomDir}`, reason: "General exploration" };
+  }
+}
+
+async function startAIThinking() {
+  while (true) {
+    if (botState.isRetaliating) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      continue;
+    }
+
+    try {
+      const decision = makeAutonomousDecision();
+      
+      console.log(`Bot Decision: ${decision.action}`);
+      console.log(`Reason: ${decision.reason}`);
+      
+      botState.lastAction = decision.action;
+      executeAction(decision.action);
+      
+    } catch (error) {
+      console.error('Error in decision loop:', error);
+    }
+
+    // Shorter wait time for more responsive bot
+    await new Promise(resolve => setTimeout(resolve, 8000));
+  }
+}
+
+// Handle process termination (unchanged)
+process.on('SIGINT', () => {
+  console.log('Disconnecting bot...');
+  bot.quit();
+  process.exit();
+});
+
+console.log('Starting ChatGPT Minecraft Bot with Gemini AI for offline server...');
