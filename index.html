@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Renderer Web Page</title>
+  <style>
+    /* Neon background */
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background-color: #0f0f0f;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 4rem;
+      color: #0ff;
+      text-shadow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #0ff;
+      margin-bottom: 20px;
+    }
+
+    p {
+      font-size: 1.5rem;
+      color: #f0f;
+      text-shadow: 0 0 5px #f0f, 0 0 10px #f0f;
+    }
+
+    button {
+      margin-top: 30px;
+      padding: 15px 30px;
+      font-size: 1.2rem;
+      color: #fff;
+      background-color: transparent;
+      border: 2px solid #0ff;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+      text-shadow: 0 0 5px #0ff;
+    }
+
+    button:hover {
+      background-color: #0ff;
+      color: #000;
+      box-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome to My Web Page</h1>
+  <p>This is a neon-style web page hosted on Renderer.</p>
+  <button onclick="alert('Hello from Renderer!')">Click Me</button>
+</body>
+</html>
