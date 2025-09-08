@@ -5,8 +5,8 @@ require('dotenv').config();
 
 // Configuration for offline server
 const config = {
-  host: process.env.SERVER_ADDRESS || 'BlazeSMP01.aternos.me',
-  port: parseInt(process.env.SERVER_PORT) || 37053,
+  host: process.env.SERVER_ADDRESS || '147.185.221.194',
+  port: parseInt(process.env.SERVER_PORT) || 29289,
   username: 'ChatGPT', // Bot name
   auth: 'offline', // Critical for offline servers
   version: '1.20.1'
