@@ -5,11 +5,11 @@ require('dotenv').config();
 
 // Configuration for offline server
 const config = {
-  host: process.env.SERVER_ADDRESS || '147.185.221.194',
-  port: parseInt(process.env.SERVER_PORT) || 29289,
+  host: process.env.SERVER_ADDRESS || '15.204.142.106',
+  port: parseInt(process.env.SERVER_PORT) || 26188,
   username: 'ChatGPT', // Bot name
   auth: 'offline', // Critical for offline servers
-  version: '1.20.1'
+  version: '1.21.8'
 };
 
 // Initialize Google Gemini AI
