@@ -24,14 +24,7 @@ let botState = {
   currentTarget: null,
   lastAction: 'Initializing',
   goals: [
-    'Gather wood and stone',
-    'Create basic tools',
-    'Find food',
-    'Build shelter',
-    'Acquire diamond gear',
-    'Find Stronghold',
-    'Defeat Ender Dragon',
-    'Resummon and defeat Ender Dragon repeatedly'
+    'Welcome Players When join in'
   ],
   currentGoalIndex: 0,
   karma: 0,
@@ -407,7 +400,7 @@ async function respondToChat(username, message) {
   } else {
     // Random friendly responses
     const responses = [
-      "Hello!", "Hi there!", "Cool!", "Nice!", "Thanks!",
+      "Hello!", "Hi there!", "KAISE HO JI", "Nice!", "Thanks!",
       "I'm busy mining!", "Survival mode!", "Gathering resources!",
       "Building and surviving!", "Good to see you!"
     ];
