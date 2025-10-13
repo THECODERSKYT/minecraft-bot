@@ -12,6 +12,8 @@
     "mineflayer": "^4.15.1",
     "mineflayer-pathfinder": "^2.4.3",
     "openai": "^4.28.0",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "vec3": "^0.1.8",
+    "minecraft-data": "^3.54.0"
   }
 }
