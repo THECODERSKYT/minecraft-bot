@@ -7,13 +7,13 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@google/genai": "^1.16.0",
-    "dotenv": "^16.4.5",
-    "mineflayer": "^4.15.1",
-    "mineflayer-pathfinder": "^2.4.3",
-    "openai": "^4.28.0",
-    "express": "^4.18.2",
-    "vec3": "^0.1.8",
-    "minecraft-data": "^3.54.0"
+    "@google/genai": "^1.19.0",
+    "dotenv": "^16.5.0",
+    "mineflayer": "^4.16.0",
+    "mineflayer-pathfinder": "^2.5.0",
+    "openai": "^4.31.0",
+    "express": "^4.21.1",
+    "vec3": "^0.1.9",
+    "minecraft-data": "^3.57.0"
   }
 }
