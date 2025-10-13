@@ -324,7 +324,6 @@ createBot();    console.log('Spawned in world. Starting behaviors.');
       }
     }, 5000);
   });
-}
 
 ////////////////////////////////////
 // --- GEMINI helper --------------
