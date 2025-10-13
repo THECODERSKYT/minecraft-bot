@@ -1,13 +1,11 @@
-// index.js
+// server.js
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals: { GoalNear } } = require('mineflayer-pathfinder');
 const Vec3 = require('vec3');
 const { GoogleGenAI } = require('@google/genai');
 
-////////////////////////////////////
-// --- CONFIG (from your input) ---
-////////////////////////////////////
+// ================= CONFIG =================
 const config = {
   host: process.env.SERVER_ADDRESS || '15.204.142.106',
   port: parseInt(process.env.SERVER_PORT || '26188', 10),
@@ -15,7 +13,7 @@ const config = {
   auth: 'offline',
   version: process.env.MC_VERSION || '1.21.8',
   rootPlayerName: process.env.ROOT_PLAYER || 'ROOT_SKYT',
-  operatorList: process.env.OPERATORS || 'ROOT_SKYT',
+  operatorList: process.env.OPERATORS || 'operatorlist',
   geminiApiKey: process.env.GEMINI_API_KEY || "AIzaSyDtFqe6NtmmAAXOIYrnfWUCJ5iWy1omAzs",
   scanIntervalMs: 1500,
   pickupRange: 12,
@@ -23,59 +21,22 @@ const config = {
   dangerAvoidDistance: 8
 };
 
-////////////////////////////////////
-// --- Gemini client --------------
-////////////////////////////////////
+// ================ GEMINI ================
 const genAI = new GoogleGenAI({ apiKey: config.geminiApiKey });
 
-////////////////////////////////////
-// --- Global state & functions ---
-////////////////////////////////////
+// ================ GLOBALS ================
 let bot = null;
 let mcData = null;
 let isAttacking = false;
 let reconnectTimer = null;
 let isShuttingDown = false;
+let lastTeleportTime = 0; // <--- cooldown tracker for /tp ROOT_SKYT
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function isAnimalTarget(entity) {
-  if (!entity || !entity.name) return false;
-  const n = entity.name.toLowerCase();
-  return n === 'pig' || n === 'sheep';
-}
-
-function isHostileDanger(entity) {
-  if (!entity || !entity.name) return false;
-  const n = entity.name.toLowerCase();
-  return n.includes('creeper') || n.includes('zombie');
-}
-
-function findClosestByFilter(filter, maxDist = 40) {
-  const arr = Object.values(bot.entities).filter(e => e && e.position && filter(e));
-  arr.sort((a,b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
-  return arr.find(e => e.position.distanceTo(bot.entity.position) <= maxDist) || null;
-}
-
-function findClosestAnimal(maxDist = 40) {
-  return findClosestByFilter(isAnimalTarget, maxDist);
-}
-
-function findClosestDanger(maxDist = config.dangerAvoidDistance) {
-  return findClosestByFilter(isHostileDanger, maxDist);
-}
-
-function findClosestDroppedItem(maxDist = config.pickupRange) {
-  const ents = Object.values(bot.entities).filter(en => en?.item && en.position && en.position.distanceTo(bot.entity.position) <= maxDist);
-  ents.sort((a,b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
-  return ents[0] || null;
-}
-
-////////////////////////////////////
-// --- Bot creation & reconnect ---
-////////////////////////////////////
+// ================= BOT CREATION =================
 function createBot() {
-  console.log('Creating bot to', `${config.host}:${config.port}`, 'as', config.username);
+  console.log('Creating bot connection...');
   bot = mineflayer.createBot({
     host: config.host,
     port: config.port,
@@ -86,22 +47,225 @@ function createBot() {
 
   bot.loadPlugin(pathfinder);
 
-  bot.on('error', err => {
-    console.error('Bot error:', err?.message || err);
+  bot.on('login', () => console.log('✅ Logged in as', bot.username));
+  bot.on('error', err => console.error('Bot error:', err.message));
+
+  bot.on('spawn', () => {
+    try { mcData = require('minecraft-data')(bot.version); } catch {}
+    console.log('Spawned — starting main AI loop');
+    const moves = new Movements(bot, mcData);
+    bot.pathfinder.setMovements(moves);
+    mainLoop();
   });
 
-  bot.once('login', () => {
-    console.log('Logged in:', bot.username);
+  bot.on('playerJoined', (p) => {
+    if (p && p.username) bot.chat(`Welcome ${p.username}! The Server Owner is ${config.operatorList}`);
   });
 
-  bot.on('spawn', async () => {
-    try {
-      mcData = require('minecraft-data')(bot.version);
-    } catch (e) {
-      console.warn('Could not load minecraft-data for version', bot.version);
+  bot.on('chat', async (u, msg) => {
+    if (!msg || u === bot.username) return;
+    if (msg.toLowerCase().startsWith('chat!')) {
+      const q = msg.slice(5).trim();
+      if (!q) return bot.chat('Please type message after "chat!"');
+      try {
+        const reply = await askGemini(q);
+        bot.chat(reply);
+      } catch {
+        bot.chat('Gemini unavailable.');
+      }
     }
+  });
 
-    console.log('Spawned in world. Starting behaviors.');
+  bot.on('end', () => {
+    if (isShuttingDown) return;
+    console.log('Disconnected — Reconnecting in 5s');
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(createBot, 5000);
+  });
+}
+
+// ================= HELPER FUNCTIONS =================
+function isAnimalTarget(e) {
+  const n = e?.name?.toLowerCase() || '';
+  return n === 'pig' || n === 'sheep';
+}
+function isHostile(e) {
+  const n = e?.name?.toLowerCase() || '';
+  return n.includes('creeper') || n.includes('zombie');
+}
+function findClosest(filter, range = 40) {
+  const arr = Object.values(bot.entities).filter(e => e.position && filter(e));
+  arr.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+  return arr.find(e => e.position.distanceTo(bot.entity.position) <= range) || null;
+}
+function findAnimal() { return findClosest(isAnimalTarget, 40); }
+function findDanger() { return findClosest(isHostile, config.dangerAvoidDistance); }
+function findDrop() {
+  const ents = Object.values(bot.entities).filter(e => e?.item && e.position.distanceTo(bot.entity.position) < config.pickupRange);
+  ents.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+  return ents[0] || null;
+}
+
+// ================= GEMINI CHAT =================
+async function askGemini(text) {
+  const res = await genAI.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `User: ${text}\nReply briefly as Gemini.`,
+    generationConfig: { maxOutputTokens: 200, temperature: 0.4 }
+  });
+  return res.text?.trim() || 'Gemini reply error.';
+}
+
+// ================= COMBAT & MOVEMENT =================
+async function fleeFrom(ent) {
+  if (!ent?.position) return;
+  const my = bot.entity.position;
+  const away = my.minus(ent.position);
+  const len = Math.hypot(away.x, away.z) || 1;
+  const target = my.offset((away.x / len) * 8, 0, (away.z / len) * 8);
+  bot.pathfinder.setGoal(new GoalNear(target.x, target.y, target.z, 2.5));
+  await sleep(4000);
+  bot.pathfinder.setGoal(null);
+}
+
+async function attackAnimal(ent) {
+  if (!ent || isAttacking || !isAnimalTarget(ent)) return;
+  isAttacking = true;
+  try {
+    bot.pathfinder.setGoal(new GoalNear(ent.position.x, ent.position.y, ent.position.z, 1.8));
+    while (ent.isValid && ent.health > 0) {
+      const danger = findDanger();
+      if (danger) { await fleeFrom(danger); break; }
+      await bot.lookAt(ent.position.offset(0, ent.height / 2, 0));
+      if (bot.entity.position.distanceTo(ent.position) <= config.attackRange) bot.attack(ent);
+      await sleep(400);
+    }
+  } catch (e) { console.error('attackAnimal:', e.message); }
+  bot.pathfinder.setGoal(null);
+  isAttacking = false;
+}
+
+// ================= EAT & CRAFT BED =================
+async function eatIfLow() {
+  if (bot.food > 12 && bot.health > 10) return;
+  const food = bot.inventory.items().find(i =>
+    ['bread', 'apple', 'cooked', 'carrot', 'potato'].some(f => i.name.includes(f))
+  );
+  if (!food) return;
+  try {
+    await bot.equip(food, 'hand');
+    await bot.consume();
+    console.log('🍞 Ate', food.name);
+  } catch {}
+}
+
+async function craftBed() {
+  if (!mcData) return;
+  const hasBed = bot.inventory.items().some(i => i.name.endsWith('_bed'));
+  if (hasBed) return;
+  const bed = mcData.itemsArray.find(i => i.name === 'white_bed');
+  if (!bed) return;
+  const recipes = bot.recipesFor(bed.id, null, 1);
+  if (!recipes.length) return;
+  try {
+    await bot.craft(recipes[0], 1, null);
+    console.log('🛏️ Crafted bed');
+  } catch {}
+}
+
+async function sleepIfNight() {
+  const t = bot.time.timeOfDay;
+  if (t < 13000 || t > 23000) return;
+  const bed = bot.inventory.items().find(i => i.name.endsWith('_bed'));
+  if (!bed) return;
+  try {
+    await bot.equip(bed, 'hand');
+    const below = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    await bot.placeBlock(below, new Vec3(0, 1, 0));
+    await sleep(500);
+    console.log('🛏️ Placed bed for sleep attempt');
+  } catch {}
+}
+
+// ================= LOOT & TELEPORT =================
+async function collectDrop() {
+  const drop = findDrop();
+  if (!drop) return false;
+  try {
+    bot.pathfinder.setGoal(new GoalNear(drop.position.x, drop.position.y, drop.position.z, 1.2));
+    await sleep(1500);
+    bot.pathfinder.setGoal(null);
+    return true;
+  } catch { bot.pathfinder.setGoal(null); return false; }
+}
+
+async function giveLootToRoot() {
+  const root = config.rootPlayerName;
+  const rootPlayer = bot.players[root]?.entity;
+  const items = bot.inventory.items().filter(i => i.count > 0);
+  if (!items.length) return;
+
+  // --- Teleport every 10 minutes only ---
+  const now = Date.now();
+  if (now - lastTeleportTime > 600000) { // 10 min
+    try { bot.chat(`/tp ${root}`); console.log('📡 /tp ROOT_SKYT (every 10 min)'); }
+    catch {}
+    lastTeleportTime = now;
+  }
+
+  // --- If ROOT_SKYT online, toss loot ---
+  if (!rootPlayer) return;
+  try {
+    const pos = rootPlayer.position;
+    bot.pathfinder.setGoal(new GoalNear(pos.x, pos.y, pos.z, 2.2));
+    await sleep(2000);
+    bot.pathfinder.setGoal(null);
+    for (const item of items) {
+      const name = item.name || '';
+      if (/sword|pickaxe|axe|helmet|boots|leggings|chestplate/.test(name)) continue;
+      await bot.tossStack(item);
+      await sleep(200);
+    }
+  } catch (e) { bot.pathfinder.setGoal(null); }
+}
+
+// ================= MAIN LOOP =================
+async function mainLoop() {
+  while (bot && !isShuttingDown) {
+    try {
+      const danger = findDanger();
+      if (danger) { console.log('⚠️ Danger:', danger.name); await fleeFrom(danger); }
+
+      await eatIfLow();
+      await craftBed();
+      await sleepIfNight();
+
+      if (await collectDrop()) { await giveLootToRoot(); await sleep(300); continue; }
+
+      const target = findAnimal();
+      if (target) { await attackAnimal(target); await collectDrop(); await giveLootToRoot(); continue; }
+
+      // idle small move
+      const yaw = Math.random() * Math.PI * 2;
+      const dx = Math.cos(yaw) * 2, dz = Math.sin(yaw) * 2;
+      bot.pathfinder.setGoal(new GoalNear(bot.entity.position.x + dx, bot.entity.position.y, bot.entity.position.z + dz, 1.3));
+      await sleep(1200);
+      bot.pathfinder.setGoal(null);
+    } catch (e) { console.error('Loop err:', e.message); }
+    await sleep(config.scanIntervalMs);
+  }
+}
+
+// ================= EXIT HANDLING =================
+process.on('SIGINT', () => {
+  console.log('Graceful exit');
+  isShuttingDown = true;
+  bot.quit();
+  setTimeout(() => process.exit(0), 1000);
+});
+
+// ================= START =================
+createBot();    console.log('Spawned in world. Starting behaviors.');
     // Setup pathfinder movements
     try {
       const defaultMovements = new Movements(bot, mcData);
