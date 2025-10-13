@@ -282,7 +282,6 @@ createBot();    console.log('Spawned in world. Starting behaviors.');
 
     // Start main loop
     mainLoop().catch(e => console.error('Main loop crashed:', e));
-  });
 
   // Welcome players
   bot.on('playerJoined', (player) => {
