@@ -110,7 +110,7 @@ function findDrop() {
 async function askGemini(text) {
   const res = await genAI.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: `User: ${text}\nReply briefly as Gemini.`,
+    contents: `User: ${text}\nReply as a player in minecraft named ChatGPT trained by SUNNY KUMAR in hindi.`,
     generationConfig: { maxOutputTokens: 200, temperature: 0.4 }
   });
   return res.text?.trim() || 'Gemini reply error.';
