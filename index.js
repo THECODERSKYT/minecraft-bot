@@ -7,8 +7,8 @@ const { GoogleGenAI } = require('@google/genai');
 
 // ================= CONFIG =================
 const config = {
-  host: process.env.SERVER_ADDRESS || '15.204.142.106',
-  port: parseInt(process.env.SERVER_PORT || '26188', 10),
+  host: process.env.SERVER_ADDRESS || 'play.skyt.qzz.io',
+  port: parseInt(process.env.SERVER_PORT || '26805', 10),
   username: process.env.BOT_USERNAME || 'ChatGPT',
   auth: 'offline',
   version: process.env.MC_VERSION || '1.21.8',
